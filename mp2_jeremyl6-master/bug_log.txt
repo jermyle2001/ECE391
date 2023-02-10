@@ -1,0 +1,76 @@
+THIS IS THE BUG AND DEVELOPMENT LOG CREATED FOR TRACKING PURPOSES
+
+WORK ON VERTICAL LINE
+-   Used Horizontal Line as reference for Vertical Line
+-   Similar to Horizontal Line, but traverses differently, as it needs
+    to traverse non-consecutive(?) addresses to get the correct locations
+    involving row offsets and screen widths
+BUGS ON VERTICAL LINE
+-   Initially just replaced values in Horizontal Line, but caused issues
+    related to screen tearing and improper visuals. Fixed by adjusting offsets
+    and approach to traversal.
+
+WORK ON STATUS BAR
+-   Created copy_status_bar by referencing original ASM function copy_image,
+    adjusted the code to account for the size of the Status Bar (320 * 18) instead
+    of the entire screen, from 16000 -> 1440
+-   Created show_status_bar to implement a single-colored status bar on screen,
+    referencing show_screen to do so. Manually creates a buffer the preset size
+    of the status bar, and copies to the actual screen buffer. 
+    --  In doing so, also modified an aspect of set_mode_x, to start video
+        display AFTER the status bar size was taken into account
+    --  Also added show_status_bar to adventure.c so that we could test whether
+        it would actually draw or not
+
+BUGS ON STATUS BAR
+-   Struggled to implement show_status_bar correctly, got a bug where the screen  
+    would remain completely black, rendering device useless until restart. Fixed by
+    manually setting the values of the status bar colors, and re-adjusting the size of
+    the STATUS_BAR_SIZE value to account for the number of planes, from 5760->1440
+
+WORK ON TEXT_TO_BUFFER
+-   Created text_to_buffer which writes a character to the status buffer, but does NOT 
+    copy that buffer into the VGA memory yet. 
+
+BUGS ON TEXT_TO_BUFFER
+-   Struggled to calculate the offsets correctly. Wasn't including the plane offset, nor
+    writing to each plane. 
+-   Couldn't quite index into font_data correctly, until I figured out that the ASCII values
+    correspond with the font data values, making indexing much easier. Additionally, needed to
+    observe that the second argument in font data was the row of the pixels for the character
+    we wanted to print.
+-   Needed to scan the correct bit, and print accordingly. Attempted to do so using an array and
+    indexing accordingly, but ultimately became too complicated.
+-   Needed to set the write mask accordingly, and although all that was done was copied over from 
+    show_screen, a large amount of documentation needed to be read in order to understand what was
+    really happening in setting the write mask. 
+-   When writing FOR loops, was not able to declare variables inside the loops, due to having an 
+    older version of C (presumably)
+-   Miscalculated the offsets for middle alignment, divided by 2 at wrong place in equation
+-   Fixed the flickering on the screen by adjusting TEXT_TO_BUFFER to print both room and command at the
+    same time, to avoid calling show_status_bar multiple times to print both
+-   Couldn't quite figure out how to add underscore for typing - resorted to implementing a slight offset
+    in text_to_buffer, as well as had an issue with properly casting the character itself, but fixed by
+    casting with char* instead of char.
+
+
+BUGS ON TUX IOCTLS
+-   In set buttons, had an issue where I defined the mask incorrectly
+-   Major issue in C90, "forbids declaration and assignment", had to declare variables before assigning all
+-   Had a bug with copy_to_user, had trouble assigning first argument to pointer but found workaround
+
+BUGS ON TUX SYNCHRONIZATION
+-   Had issues with getting the Tux Emulator to be responsive at all, forgot to put the essential code
+    into init_input()
+-   Incorrectly set the condition for sending the conditional signal to our thread, fixed by setting it
+    appropriately
+-   Game scrolled too fast when room change button is held - opted to keep track of previous button pressed
+    to prevent button from being held down causing the scrolling
+
+BUGS ON OCTREES 
+-   Color had a greenish tint - shifted the red and blue to the left when calculating distance to 
+    increase their weight proportionally
+-   Random bits were not being filled in - used a function to find closest pixel instead of finding
+    the exact match 
+-   Also had a purple overlay to my octree - was not employing the level2 octrees correctly, and needed
+    to offset by 128 initial level 4 registers
