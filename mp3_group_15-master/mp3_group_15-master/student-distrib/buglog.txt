@@ -1,0 +1,353 @@
+/* ///////////////////////////////////////////////////////////// */
+/* -------------------- CHECKPOINT 1 BUGLOG -------------------- */
+/* ///////////////////////////////////////////////////////////// */
+
+Date: 10/12/2022
+Problem: Segfault on CLI 
+Solution: Connect to the test_debug instead of trying to run through 
+    the program in the userspace. Running the program in userspace 
+    leaves the program unconnected to QEMU, and thus will not allow
+    the program to access such.
+
+
+Date: 10/12/2022
+Problem: System would not boot up
+Solution: Two things were required to get the system to boot up:
+    1. Loading the GDT. Needed to add label gdt_bottom to describe the size of the GDT.a
+    2. Loading the IDT. Even after idt_init was called, would not properly load the IDT. 
+        Issue involved moving the IDT call to BEFORE the ljmp instruction, in order to 
+        actually run through the code that loaded the IDT.
+Time Spent: Three Hours. 
+
+
+Date: 10/14/2022
+Problem: Keyboard handler never actually being called, pressed keys don't show up on the screen
+Solution: The send_EOI() function of the PIC was incorrect, so the end-of-interrupt signal was never being sent. 
+         Needed to change the port that was being written to from the data port to the command port 
+         (MASTER_8259_PORT_D --> MASTER_8259_PORT_C)
+Time Spent: 1 hour
+
+
+Date: 10/16/2022
+Problem: Assembly Linkage Arguments undeclared / uninitialized in Assembly Linkage code
+Solution: Redefine approach to linkage. Instead of needing the nane of the vector, instead
+    opt to use its id as a simpler way to pass onto stack. Also defining the assembly linkage
+    as a function in its header file, so that we could properly pass arguments to it from other
+    functions. Basically, treated the assemby linkage like a C function in terms of being able 
+    to call it within C, but gave it arguments and called the actual exception handler from
+    within the assembly linkage. 
+Time Spent: Two Hours
+
+
+Date: 10/16/2022
+Problem: Exception Wrapper implicitly declared
+Solution: Properly declare the Exception Wrapper. In this case, was missing a semicolon at the 
+    end of the function declaration. Adding the semicolon fixed the issue.
+Time Spent: Three Hours. 
+
+
+Date: 10/16/2022
+Problem: RTC compiles but is not causing anything to happen on the screen.
+Solution: Needed to change the order of the parameters in the outb and inb functions
+Time spent: About 10 min to figure out
+Amount of code: About 15 lines needed to be changed
+
+
+Date: 10/16/2022
+Problem: Getting an implicit declaration when calling test_interrupts in rtc_handler() in rtc.c
+Solution: Needed to add test_interrupts to the lib.h file since it is never declared there and only in the .c file
+Time spent: Way to long... 1 hour
+Amount of code: 1 line
+
+
+Date: 10/16/2022
+Problem: Initialized size of array is not the same as the actual size of array
+Solution: Just needed to count the amount of elements in the keyboard scancode_to_char matrix
+Time spent: 1 min
+Amount of code: 1 line
+
+Date: 10/17/2022
+Problem: The first character of the keyboard input is not being shown on the screen
+Solution: Needed to change the putc function line "screen_y++" to "screen_y = (screen_y + 1) % NUM_ROWS".
+    Found the solution on Piazza but when the screen y index is set to 25 you lose the first character
+    when it is printed. 
+Time spent: 10 min
+Amount of code: 1 line
+
+
+
+/* ///////////////////////////////////////////////////////////// */
+/* -------------------- CHECKPOINT 2 BUGLOG -------------------- */
+/* ///////////////////////////////////////////////////////////// */
+Date: 10/20/2022
+Problem: Despite updating putc to work with the terminal driver, the cursor was not updating. Attempting to update
+         the cursor manually via putc would leave the actual cursor still on the screen.
+Solution: After researching on osdev.org (see terminal_print_cursor for more details), found that the VGA memory needed
+          to be updated at certain locations, specifically certain VGA registers. 
+Time Spent: 30 min
+Amount of Code: 10ish lines - created helper function
+
+10/20/2022
+Problem: In implementing the line wrap-around functionality of the terminal driver and keyboard line support, the character
+         would not print at the very end of the line, and instead wrap-around, leaving the very last column of the terminal 
+         unused. 
+Solution: Resorted to printing the character, BEFORE forcing the terminal to wrap-around / move to the next location / updating
+          terminal_x and terminal_y, as they were used to point to the next available place to print.
+Time Spent: 30 min
+Amount of Code: 2 lines
+
+Date: 10/21/2022
+Problem: In terminal_write, the string written to the screen would be stuck on the same string after the screen was cleared
+         or the "ENTER" button was pressed, despite another string typed before "ENTER" was pressed.
+Solution: Due to the implementation of the terminal's custom putc and putS, the buffer needed to be cleared in order to 
+          properly print the string, as it only contained the previous string and would not update unless cleared. 
+Time Spent: 30 min 
+Amount of Code: 2 lines
+
+Date: 10/21/2022
+Problem: All file and directory names were printing the same
+Solution: When updating the file position after reading (file_read and dir_read), was updating the local variable 
+          for the open file descriptor instead of the actual global file descriptor array which would actually update 
+          file_position value
+Time spent: 30 min
+Amount of code: 1 line
+
+Date: 10/22/2022
+Problem: File names were printing out strangely when trying to print out all files in the directory 
+Solution: Needed to add a NULL character to the end of the buffer to signify the end of the file name 
+          and to begin reading the next file name if there is one
+Time spent: 30 min
+Amount of code: 1 line
+
+Date 10/23/2022
+Problem: rtc_write is not correctly setting the frequency of the periodic interrupts. Seems to have no effect but it is being called correctly
+Solution: With a print statment I was able to see that my input to the buffer was backwards and this caused the rate being passed to be invalid and was never setting the clock because of the bound checks 
+Time spent: 30 min
+Amount of code: 4 lines
+
+Date: 10/24/2022
+Problem: Open_file failed in all instances
+Solution: When opening a file, an available file descriptor needs to be allocated. We choose the first available file descriptor with a short algorithm that assumes that the first two file descriptors are taken (by stdin and stdout). If the first file descriptor is not taken, our short algorithm fails. In init_fileArray, after setting flags=1 for the first two file descriptors, we mistakenly loop over every file descriptors and set flags=0. We should instead only loop over the remaining file descriptors (start our loop at i=2 rather than i=2) when intializing flags=0. Doing so allows our files to be matched with a file descriptor and then be opened.
+Time spent: 45 min
+Amount of code: 1 line
+
+Date: 10/24/2022
+Problem: When trying to read a file, there was seemingly no good data stored in any data block location.
+Solution: The size of our data block was incorrect. Replacing our array of chars with an array of ints in our data block yielded a correctly sized structure such that our pointer arithmetic accessed the correct information from memory via the samely indexed data blocks.
+Time spent: 3 hours
+Amount of code: 1 line
+
+Date: 10/24/2022
+Problem: rtc_read's volatile int was not being updated by the interrupt handler 
+Solution: the problem wasn't with the volatile int but instead that the RTC was not being initlized correctly for that test case. Needed to add a rtc_init for the checkpoint 2 test case
+Time spent: 3 Hours
+Amount of code: 1 line...
+
+/* ///////////////////////////////////////////////////////////// */
+/* -------------------- CHECKPOINT 3 BUGLOG -------------------- */
+/* ///////////////////////////////////////////////////////////// */
+
+Date: 11/3/2022
+Problem: When working on read and write, attempting to utilize the function pointer
+    would cause type issues, specifically match issues
+Solution: Modified terminal driver's read and writes to match the types associated
+    with the system calls. Needed to typecast the void pointer to a string pointer 
+    in order to utilize the pointer as intended.
+Time Spent: 30 mins
+Amount of Code: 6 lines
+
+Date: 11/5/2022
+Problem: In testcases, would page fault when attempting to access page memory.
+Solution: The memory was not being mapped at all. Needed to set up a subroutine to map the 
+    memory onto a page and enable its memory so that our test could properly access the page's
+    memory.
+Time Spent: 1 Hours
+Amount of Code: 15ish lines
+
+Date: 11/5/2022
+Problem: When attempting to assign the virtual to physical address translation, the struct
+    could not be assigned properly.
+Solution: Calculated the virtual to physical address translation, and broke the value down
+    bitwise so that each field in the data struct could be assigned.
+Time Spent: 30 min.
+Amount of Code: 15ish lines
+
+Date: 11/6/2022
+Problem: When using the subroutine to map memory to the user page, the compiler would not 
+    properly read the included function.
+Solution: Copy mapping code as needed, as the code is not needed to be called very many times.
+Time Spent: 1 hour
+Amount of Code: 15ish lines
+
+Date: 11/6/2022
+Problem: When writing inline assembly, last register would be clobbered regardless of which constraints
+    were imposed.
+Solution: Add an extra line to the inline assembly code to have it clobber a register we didn't care about.
+    Temporary but working fix.
+Time Spent: 1 hour
+Amount of Code: 1 line 
+
+/* ///////////////////////////////////////////////////////////// */
+/* -------------------- CHECKPOINT 4 BUGLOG -------------------- */
+/* ///////////////////////////////////////////////////////////// */
+
+Date: 11/12/2022
+Problem: When attempting to open the files for regular files and directory, the fd returned would be 0.
+Solution: Updated dir open and file open to return the fd they found, in contrast to the status of the 
+    function (from pass/fail to fd found)
+Time Spent: 1 hour
+Amount of Code: 2 lines
+
+Date: 11/13/2022
+Problem: When calling the function operations for each file, the operation would read the wrong function
+    for the filetype. 
+Solution: The fops table is shared *globally* between all functions. Thus, in order to use the appropriate
+    function, we reset the fops table on every read and write, since open and close were only called once
+    per file, and were pretty similar with each file.
+Time Spent: 2 hours
+Amount of Code: 3 lines
+
+Date: 11/13/2022
+Problem: When calling the getargs function it is printing out and arg of just "B" even if there are no arguments
+    that are being passed.
+Solution: Needed to add an extra check fro the edge case where there are no args, the i value was becoming very
+    large and printing our from some random address which in this case was just the letter "B'
+Time Spent: 30min
+Amount of Code: 3 Lines
+
+Date: 11/13/2022
+Problem: Fd was fixed to 2 and the current PID was always 0.
+Solution: When getting PID for new process, remember to set pid_array[ i ] = 1.
+Time Spent: 30 mins
+Amount of Code: 1 line
+
+Date: 11/13/2022
+Problem: Created PCBs had no record of esp0 or ss0 with them
+Solution: Save value of esp0 and ss0 into each new pcb struct
+Time Spent: 1 hour
+Amount of Code: 2 Lines
+
+Date: 11/13/2022
+Problem: Page fault at every halt
+Solution: Set the parent return address for every new pcb 
+Time Spent: 1 hour
+Amount of Code: 7 lines
+
+Date: 11/14/2022
+Problem: When attempting to open the program Pingpong the function would print out the first line and 
+    stay stuck in read.
+Solution: The rtc open was returning the wrong fd value. Set the open syscall to return fd, but still   
+    call the corresponding open function and interpret the result.
+Time Spent: 30 mins
+Amount of Code: 3 lines
+
+/* ///////////////////////////////////////////////////////////// */
+/* -------------------- CHECKPOINT 5 BUGLOG -------------------- */
+/* ///////////////////////////////////////////////////////////// */
+
+Date: 11/15/2022
+Problem: When doing the ls function, the function would break after reading the very long text file 
+    name. It would loop infinitely and be stuck in terminal_read when it should have been using
+    dir_read.
+Solution: The issue was caused by read_data, which would read too many bytes and overwrite the location
+    where our fd was placed in our main function, thus we needed to omit the addition of an extra null 
+    character letter at the end of the buffer.
+Time Spent: 3 hours
+Amount of Code: 2 lines 
+
+Date: 11/15/2022
+Problem: When doing the ls function, the function would break after reading the very long text file
+    and print incorrectly. The onscreen contents would contain previous buffer contents, and would print
+    extra newline characters leftover from the previous call to read.
+Solution: Clear the buffer with every read. Thus nullifies the possibilty of leftover data.
+Time Spent: 30 mins
+Amount of Code: 1 line
+
+Date: 11/15/2022
+Problem: When running multiple programs consecutively, the shell would not allow more than 5 or 6 commands
+    to be run.
+Solution: Close files and make sure that PID is set prior to executing shell. 
+Time Spent: 30 mins
+Amount of Code: 8 lines
+
+Date: 11/15/2022
+Problem: When doing the cat function, the function would loop infinitely upon attempting to cat .exe files.
+    This was caused by the fd being clobbered, causing the function to use terminal_read instead of file_read.
+Solution: Omit the null character addition in file_read. Also, clear the buffer just in case.
+Time Spent: 30 mins
+Amount of Code: 2 lines
+
+Date: 11/28/2022
+Problem: When invoking the ls function, the function would fail on second attempt or fail when in shell in shell.
+    This was caused by the exclusion of a NULL end string character at the end of the directory read.
+Solution: Add the NULL character in directory read, and adjust the file name length or string length read.
+Time Spent: 30 mins
+Amount of Code: 4 lines
+
+Date: 11/28/2022
+Problem: Shell in Shell would not allow additional commands, and exiting would cause the program to exit to
+    the bootup screen.
+Solution: The PID for the program was never truly being reset on the last shell, and thus would cause the program
+    to use up all PIDs in addition to cause the program to exit into bootup as a result of faulty PIDs.
+Time Spent: 30 mins
+Amount of Code: 1 line. Note: Reverted back to old commit which worked better (commit on Nov 14) and added one line.
+
+Date: 11/28/2022
+Problem: cat would print weird newlines, or print too many on cat verylargetextwithverylongname.txt 
+Solution: Issue stemmed from how printing was approached, reformatted the keyboard driver to take into account 
+not needing to create a newline if unnecessary.
+Time Spent: 45 mins
+Amount of Code: 10 lines, referenced old code and reformatted approach
+
+Date: 11/28/2022
+Problem: cat would stop printing too early in verylargetext file 
+Solution: Issue stemmed from read_data, which would read in the wrong data block if the offset passed in was
+    too large. Added a check to prevent such.
+Time Spent: 30 mins 
+Amount of code: 4 lines.
+
+Date: 11/28/2022
+Problem: cat would print too many lines
+Solution: Add the missing offset in the check for end of file.
+Time Spent: 1 hour.
+Amount of code: 1 line.
+
+Date: 11/29/2022
+Problem: Executing fish would cause an immediate page fault
+Solution: The page size needed to be set to a 4KB page instead of a 4MB page since video memory is only 4KB.
+Time Spent: 30 mins
+Amount of Code: 1 line
+
+Date: 11/29/2022
+Problem: Executing fish would still cause a page fault even after properly setting the page size since the page directory index
+    and screen start address weren't properly aligned
+Solution: The page directory index used the top 10 bits of the screen start address to properly get the correct virtual address
+    since their are 1024 total page directory entries
+Time Spent: 1 hour
+Amount of Code: 4 lines
+
+Date: 12/2/2022
+Problem: In syscall_halt, curr_pid was always being set to -1 which was causing syscall_execute to be run every time
+Solution: Rearranged the code so that curr_pid gets the value of the parent_id before it's set to -1
+Time Spent: 15 minutes
+Amount of Code: 2 line swaps
+
+Date: 12/2/2022
+Problem: The values of esp and ebp were always 0 when trying to set them in syscall_halt
+Solution: Accidentally was clearing their values before saving them
+Time Spent: 15 minutes
+Amount of Code: 2 lines
+
+Date: 12/2/2022
+Problem: All programs terminate abnomally
+Solution: Needed to actually move the status parameter into register EAX in syscall_halt
+Time Spent: 15 minutes
+Amount of Code: 1 line
+
+Date: 12/3/2022
+Problem: Exitting out of the base shell in any terminal would cause a page fault due to the curr_pid value being 
+    shared across all three terminals
+Solution: Adjusted the base case in syscall_halt to now restart shell when the curr_pid is 2 instead of -1 because we
+    need three shells to be running at all times (1 per terminal)
+Time Spent: 10 minutes
+Amount of Code: 2 lines
